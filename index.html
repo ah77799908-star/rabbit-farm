@@ -49,7 +49,7 @@ input,select,textarea{width:100%;padding:11px;border:1px solid #ccc;border-radiu
 const KEY='rabbitfarm.v1';
 let S;try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
 S=S||{does:[],bucks:[],matings:[],births:[],sales:[],set:{gest:31,palp:14,nest:28,wean:35,rest:7},lastBackup:null};
-S.inj=S.inj||[];S.meds=S.meds||[];S.wean=S.wean||[];S.wean=S.wean||[];
+S.inj=S.inj||[];S.meds=S.meds||[];S.wean=S.wean||[];S.bk=S.bk||[];
 let tab='home',filter='all',q='';
 const rawSave=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){alert('تعذر الحفظ على الجهاز')}};
 const save=()=>{S.ts=Date.now();rawSave();if(typeof syncQueue=='function')syncQueue()};
@@ -75,8 +75,8 @@ const stTag=d=>{const s=status(d);return s.k==='preg'?'<span class="tag o">🤰 
 // ---------- render
 function render(){
  document.getElementById('sub').textContent=S.does.length+' أنثى • '+S.bucks.length+' ذكر • '+today().split('-').reverse().join('/');
- document.getElementById('nav').innerHTML=[['home','🏠','الرئيسية'],['does','🐰','الإناث'],['log','📒','السجل'],['health','💉','الصحة'],['wean','🍼','الفطام'],['sales','💰','المبيعات'],['more','⚙️','المزيد']].map(x=>`<button class="${tab==x[0]?'on':''}" onclick="go('${x[0]}')"><i>${x[1]}</i>${x[2]}</button>`).join('');
- const v={home,does,log,health,wean:weanTab,sales,more}[tab];
+ document.getElementById('nav').innerHTML=[['home','🏠','الرئيسية'],['does','🐰','الإناث'],['bucks','🐇','الذكور'],['log','📒','السجل'],['health','💉','الصحة'],['wean','🍼','الفطام'],['sales','💰','المبيعات'],['more','⚙️','المزيد']].map(x=>`<button class="${tab==x[0]?'on':''}" onclick="go('${x[0]}')"><i>${x[1]}</i>${x[2]}</button>`).join('');
+ const v={home,does,bucks:bucksTab,log,health,wean:weanTab,sales,more}[tab];
  document.getElementById('app').innerHTML=v();window.scrollTo(0,0);
 }
 function go(t){tab=t;render()}
@@ -154,7 +154,7 @@ function sales(){
 }
 function more(){
  const s=S.set;
- return `<div class="card"><h3>🐇 الذكور</h3>`+S.bucks.map(b=>`<div class="row"><b>${esc(b)}</b><button class="btn d sm" onclick="delBuck('${esc(b)}')">حذف</button></div>`).join('')+`<button class="btn s" onclick="buckForm()">+ إضافة ذكر</button></div>
+ return `<div class="card"><h3>🐇 الذكور</h3><div class="m">إدارة الذكور (إضافة، وزن، تعديل) من تبويب الذكور</div><button class="btn s" onclick="go('bucks')">افتح تبويب الذكور</button></div>
  <div class="card"><h3>⏱️ مواعيد (بالأيام)</h3><div class="m">الأرقام دي تقديرات شائعة، عدّلها حسب خبرتك</div>
  ${[['gest','مدة الحمل'],['palp','جس الحمل بعد'],['nest','تجهيز بيت الولادة بعد'],['wean','الفطام بعد الولادة بـ']].map(x=>`<label>${x[1]}</label><input type="number" inputmode="numeric" value="${s[x[0]]}" onchange="S.set.${x[0]}=+this.value||${s[x[0]]};save();render()">`).join('')}<label>وزن الجاهز للبيع (جرام)</label><input type="number" inputmode="numeric" value="${WTARGET()}" onchange="S.set.wtarget=+this.value||1800;save();render()"></div>
  <div class="card"><h3>🔄 مزامنة بين الأجهزة</h3><div class="m">الحالة: <b id="syncst">${syncLabel()}</b><br>اربط الجهازين بنفس كود المزامنة وهتظهر نفس البيانات على الاتنين.</div><div class="acts">${localStorage.getItem(SCODE)?`<button class="btn" onclick="syncPull(false)">🔄 مزامنة دلوقتي</button><button class="btn d" onclick="syncOff()">إيقاف</button>`:`<button class="btn" onclick="syncOn()">تفعيل المزامنة</button>`}</div></div>
@@ -164,6 +164,36 @@ function more(){
  <div class="card"><button class="btn s" onclick="exportCSV()" style="width:100%">📊 تصدير الحسابات Excel (CSV)</button></div>`;
 }
 
+// ---------- bucks tab
+const isOut=n=>!!(S.bk||[]).find(x=>x.name===n&&x.out);
+function bkRec(){S.bk=S.bk||[];S.bucks.forEach(n=>{if(!S.bk.some(x=>x.name===n))S.bk.push({id:'bk_'+n,name:n,ws:[],out:false})});return S.bk}
+const bkLast=b=>{const a=(b.ws||[]).slice().sort((x,y)=>x.d.localeCompare(y.d));return a.length?a[a.length-1].k:0};
+function bkStats(b){const ms=S.matings.filter(m=>m.buck===b.name),bs=S.births.filter(x=>x.buck===b.name),done=ms.filter(m=>m.result!=='pending'),ok=ms.filter(m=>m.result==='born').length,kids=bs.reduce((a,x)=>a+(+x.alive||0),0),last=ms.map(m=>m.date).sort().pop()||'';return{ms:ms.length,pend:ms.length-done.length,ok,rate:done.length?Math.round(ok/done.length*100):null,kids,last,avgLit:bs.length?Math.round(kids/bs.length*10)/10:0}}
+function bucksTab(){const all=bkRec(),act=all.filter(b=>!b.out),t=today();
+ const st=act.map(b=>({b,s:bkStats(b)})),tm=st.reduce((a,x)=>a+x.s.ms,0),tk=st.reduce((a,x)=>a+x.s.kids,0),best=st.slice().sort((x,y)=>y.s.kids-x.s.kids)[0];
+ const card=({b,s})=>{const lw=bkLast(b),age=b.born?diff(t,b.born):null,ageTxt=age===null?'':age>=60?' • عمره '+Math.floor(age/30.4)+' شهر':' • عمره '+age+' يوم';
+  return `<div class="card"><div class="row" style="border:0"><span><b>🐇 ${esc(b.name)}</b> ${b.out?'<span class="tag x">خارج الخدمة'+(b.outWhy?' - '+esc(b.outWhy):'')+'</span>':''}<div class="m">${b.breed?esc(b.breed)+' • ':''}${b.loc?'قفص '+esc(b.loc)+' • ':''}${lw?'الوزن '+lw+' كجم':'لسه ماتوزنش'}${ageTxt}</div></span><span class="tag b">${s.ms} تزاوج</span></div>
+  <div class="m">نجح ${s.ok}${s.rate!==null?' ('+s.rate+'%)':''}${s.pend?' • منتظر نتيجة '+s.pend:''} • صغار ${s.kids}${s.avgLit?' (متوسط '+s.avgLit+' في الولادة)':''}<br>${s.last?'آخر تزاوج: '+fd(s.last)+' ('+ago(diff(t,s.last))+')':'لسه مافيش تزاوج مسجل'}${b.note?'<br>📝 '+esc(b.note):''}</div>
+  ${(b.ws||[]).length?'<div class="m" style="margin-top:4px">'+(b.ws||[]).slice().sort((x,y)=>y.d.localeCompare(x.d)).slice(0,4).map(x=>fd(x.d)+': '+x.k+' كجم').join(' • ')+'</div>':''}
+  <div class="chips" style="margin:8px 0 0;flex-wrap:wrap"><button onclick="bkWeighForm('${b.id}')">⚖️ وزن</button>${b.out?'':`<button onclick="matingForm();document.getElementById('f2').value='${esc(b.name)}'">💕 تزاوج</button>`}<button onclick="bkForm('${b.id}')">✏️ تعديل</button><button onclick="bkOut('${b.id}')">${b.out?'↩️ رجوع للخدمة':'🚫 خارج الخدمة'}</button><button onclick="bkDel('${b.id}')">🗑️</button></div></div>`};
+ return `<div class="grid"><div class="stat"><b>${act.length}</b><span>ذكور شغالة</span></div><div class="stat"><b>${tm}</b><span>إجمالي التزاوجات</span></div><div class="stat"><b>${tk}</b><span>إجمالي الصغار</span></div><div class="stat"><b>${best&&best.s.kids?esc(best.b.name):'-'}</b><span>أكتر ذكر إنتاجا</span></div></div>
+ <button class="btn" style="width:100%;margin-top:10px" onclick="bkForm()">+ إضافة ذكر</button>`
+ +(all.length?[...st.sort((x,y)=>y.s.kids-x.s.kids),...all.filter(b=>b.out).map(b=>({b,s:bkStats(b)}))].map(card).join(''):'<div class="card empty">لسه مفيش ذكور. اضغط + إضافة ذكر</div>')}
+function bkForm(id){const b=id?S.bk.find(x=>x.id==id):null;
+ sheet(b?'✏️ تعديل ذكر':'🐇 ذكر جديد',`<label>اسم / رقم الذكر</label><input id="f1" value="${b?esc(b.name):''}"><label>السلالة / اللون (اختياري)</label><input id="f2" value="${b?esc(b.breed||''):''}"><label>تاريخ الميلاد (اختياري)</label><input type="date" id="f3" value="${b&&b.born?b.born:''}"><label>الوزن (كجم) (اختياري)</label><input type="number" inputmode="decimal" id="f4" value="${b&&bkLast(b)?bkLast(b):''}" placeholder="مثال: 4.5"><label>تاريخ الوزن</label><input type="date" id="f5" value="${today()}"><label>القفص / المكان (اختياري)</label><input id="f6" value="${b?esc(b.loc||''):''}"><label>ملاحظات (اختياري)</label><input id="f7" value="${b?esc(b.note||''):''}"><div class="acts"><button class="btn" onclick="saveBk('${id||''}')">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
+function saveBk(id){const n=V('f1').trim();if(!n)return toast('اكتب اسم أو رقم الذكر');bkRec();
+ let b=id?S.bk.find(x=>x.id==id):null;
+ if(S.bk.some(x=>x.name===n&&x!==b))return toast('الاسم ده موجود');
+ if(!b){b={id:'bk_'+n,name:n,ws:[],out:false};S.bk.push(b)}
+ else if(b.name!==n){const o=b.name;S.matings.forEach(m=>{if(m.buck===o)m.buck=n});S.births.forEach(x=>{if(x.buck===o)x.buck=n});S.bucks=S.bucks.map(x=>x===o?n:x);b.name=n}
+ if(!S.bucks.includes(n))S.bucks.push(n);
+ b.breed=V('f2').trim();b.born=V('f3');b.loc=V('f6').trim();b.note=V('f7').trim();
+ const k=+V('f4');b.ws=b.ws||[];if(k>0&&V('f5')){const e=b.ws.find(x=>x.d==V('f5'));if(e)e.k=k;else b.ws.push({d:V('f5'),k})}
+ save();closeS();tab='bucks';render();toast('تم الحفظ')}
+function bkWeighForm(id){sheet('⚖️ وزن جديد',`<label>التاريخ</label><input type="date" id="f1" value="${today()}"><label>الوزن (كجم)</label><input type="number" inputmode="decimal" id="f2" placeholder="مثال: 4.5"><div class="acts"><button class="btn" onclick="saveBkW('${id}')">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
+function saveBkW(id){const k=+V('f2');if(!k||!V('f1'))return toast('اكتب الوزن والتاريخ');const b=S.bk.find(x=>x.id==id);b.ws=b.ws||[];const e=b.ws.find(x=>x.d==V('f1'));if(e)e.k=k;else b.ws.push({d:V('f1'),k});save();closeS();render();toast('تم تسجيل الوزن')}
+function bkOut(id){const b=S.bk.find(x=>x.id==id);if(b.out){b.out=false;b.outWhy=''}else{const w=prompt('السبب (مباع / نافق / مذبوح ...) - اختياري');if(w===null)return;b.out=true;b.outWhy=w.trim()}save();render()}
+function bkDel(id){const b=S.bk.find(x=>x.id==id);if(!confirm('حذف الذكر '+b.name+'؟ (سجلات التزاوج القديمة تفضل)'))return;S.bk=S.bk.filter(x=>x.id!==id);S.bucks=S.bucks.filter(x=>x!==b.name);save();render()}
 // ---------- weaned rabbits
 const WTARGET=()=>S.set.wtarget||1800;
 const lastW=w=>{const a=(w.ws||[]).slice().sort((x,y)=>x.d.localeCompare(y.d));return a.length?a[a.length-1].g:0};
@@ -203,17 +233,17 @@ function closeS(){const e=document.getElementById('sh');if(e)e.remove()}
 function toast(m){const e=document.createElement('div');e.className='toast';e.textContent=m;document.body.appendChild(e);setTimeout(()=>e.remove(),1800)}
 const V=id=>document.getElementById(id).value;
 const doeOpts=(sel,f)=>S.does.filter(f||(()=>true)).sort((a,b)=>String(a.num).localeCompare(String(b.num),undefined,{numeric:true})).map(d=>`<option value="${d.id}" ${d.id==sel?'selected':''}>${esc(d.num)}</option>`).join('');
-const buckOpts=()=>S.bucks.map(b=>`<option>${esc(b)}</option>`).join('')+'<option value="">غير معروف</option>';
+const buckOpts=()=>S.bucks.filter(n=>!isOut(n)).map(b=>`<option>${esc(b)}</option>`).join('')+'<option value="">غير معروف</option>';
 function quick(){sheet('تسجيل سريع',`<div class="acts"><button class="btn" onclick="closeS();matingForm()">💕 تزاوج</button><button class="btn" onclick="closeS();birthForm()">🍼 ولادة</button><button class="btn" onclick="closeS();weanForm()">✂️ فطام</button><button class="btn" onclick="closeS();wBatchForm()">🍼 دفعة فطام</button><button class="btn" onclick="closeS();saleForm()">💰 بيع</button><button class="btn" onclick="closeS();injForm()">💉 حقنة</button><button class="btn" onclick="closeS();medForm()">💊 دواء</button><button class="btn s" onclick="closeS();doeForm()">🐰 أنثى جديدة</button><button class="btn s" onclick="closeS();checkForm()">🔍 نتيجة جس</button></div>`)}
 function doeForm(){sheet('إضافة أنثى',`<label>رقم الأنثى</label><input id="f1" inputmode="text" placeholder="مثال: 12"><label>السلالة / ملاحظات (اختياري)</label><input id="f2"><div class="acts"><button class="btn" onclick="saveDoe()">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
 function saveDoe(){const n=V('f1').trim();if(!n)return toast('اكتب الرقم');if(S.does.some(d=>String(d.num)==n))return toast('الرقم ده موجود');S.does.push({id:uid(),num:n,note:V('f2')});save();closeS();render();toast('تمت الإضافة')}
 function bulkForm(){sheet('إضافة عدة إناث',`<div class="m">اكتب من رقم لرقم (مثلا من 1 إلى 40)</div><label>من</label><input id="f1" type="number" inputmode="numeric"><label>إلى</label><input id="f2" type="number" inputmode="numeric"><div class="acts"><button class="btn" onclick="saveBulk()">إضافة</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
 function saveBulk(){const a=+V('f1'),b=+V('f2');if(!a||!b||b<a||b-a>500)return toast('تأكد من الأرقام');let c=0;for(let i=a;i<=b;i++)if(!S.does.some(d=>String(d.num)==String(i))){S.does.push({id:uid(),num:String(i),note:''});c++}save();closeS();render();toast('اتضاف '+c+' أنثى')}
-function buckForm(){sheet('إضافة ذكر',`<label>اسم / رقم الذكر</label><input id="f1"><div class="acts"><button class="btn" onclick="const n=V('f1').trim();if(n&&!S.bucks.includes(n)){S.bucks.push(n);save();closeS();render()}">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
-function delBuck(b){if(confirm('حذف الذكر '+b+'؟ (السجلات القديمة تفضل)')){S.bucks=S.bucks.filter(x=>x!==b);save();render()}}
+function buckForm(){bkForm()}
+function delBuck(b){const r=bkRec().find(x=>x.name===b);if(r)bkDel(r.id)}
 function matingForm(id){
  if(!S.does.length)return toast('ضيف إناث الأول');
- sheet('💕 تسجيل تزاوج',`<label>الأنثى</label><select id="f1">${doeOpts(id)}</select><label>الذكر</label><select id="f2">${buckOpts()}</select>${S.bucks.length?'':'<div class="m">ضيف الذكور من تبويب المزيد</div>'}<label>التاريخ</label><input type="date" id="f3" value="${today()}"><div class="m" id="est"></div><div class="acts"><button class="btn" onclick="saveMating()">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`);
+ sheet('💕 تسجيل تزاوج',`<label>الأنثى</label><select id="f1">${doeOpts(id)}</select><label>الذكر</label><select id="f2">${buckOpts()}</select>${S.bucks.length?'':'<div class="m">ضيف الذكور من تبويب الذكور</div>'}<label>التاريخ</label><input type="date" id="f3" value="${today()}"><div class="m" id="est"></div><div class="acts"><button class="btn" onclick="saveMating()">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`);
  const u=()=>document.getElementById('est').textContent='الولادة المتوقعة: '+fd(addD(V('f3'),S.set.gest));u();document.getElementById('f3').onchange=u}
 function saveMating(){const d=V('f1'),dt=V('f3');if(!dt)return toast('اختار التاريخ');
  const o=S.matings.find(m=>m.doe==d&&m.result==='pending');
@@ -245,12 +275,12 @@ function delDoe(id){if(!confirm('حذف الأنثى وكل سجلاتها؟'))r
 // backup
 function dl(name,txt,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove()}
 function exportData(){S.lastBackup=today();save();dl('rabbits-backup-'+today()+'.json',JSON.stringify(S),'application/json');render()}
-function importData(i){const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.does)throw 0;if(confirm('هيتم استبدال البيانات الحالية بالنسخة دي. متأكد؟')){S=d;S.inj=S.inj||[];S.meds=S.meds||[];S.wean=S.wean||[];save();render();toast('تم الاسترجاع')}}catch(e){alert('الملف غير صالح')}};r.readAsText(f)}
-function exportCSV(){const rows=[['النوع','التاريخ','الأنثى','الذكر','عدد','المبلغ','الوزن كجم','سعر الكيلو']];S.matings.forEach(m=>rows.push(['تزاوج',m.date,dn(m.doe),m.buck,'','']));S.births.forEach(b=>rows.push(['ولادة',b.date,dn(b.doe),b.buck,b.alive,'']));S.inj.forEach(x=>rows.push(['حقنة '+x.name,x.date,x.doe?dn(x.doe):'الكل','',x.dose,'']));S.meds.forEach(x=>rows.push(['دواء '+x.name,x.date,x.doe?dn(x.doe):'الكل','',x.dose,'']));S.sales.forEach(s=>rows.push(['بيع',s.date,s.doe?dn(s.doe):'',s.buyer,s.count,s.total,s.weight||'',s.kilo||'']));(S.wean||[]).forEach(w=>rows.push(['فطام '+(w.num||''),w.date,w.doe?dn(w.doe):'','',w.count,'',lastW(w)||'','']));dl('rabbits.csv','\ufeff'+rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(',')).join('\n'),'text/csv')}
+function importData(i){const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.does)throw 0;if(confirm('هيتم استبدال البيانات الحالية بالنسخة دي. متأكد؟')){S=d;S.inj=S.inj||[];S.meds=S.meds||[];S.wean=S.wean||[];S.bk=S.bk||[];save();render();toast('تم الاسترجاع')}}catch(e){alert('الملف غير صالح')}};r.readAsText(f)}
+function exportCSV(){const rows=[['النوع','التاريخ','الأنثى','الذكر','عدد','المبلغ','الوزن كجم','سعر الكيلو']];S.matings.forEach(m=>rows.push(['تزاوج',m.date,dn(m.doe),m.buck,'','']));S.births.forEach(b=>rows.push(['ولادة',b.date,dn(b.doe),b.buck,b.alive,'']));S.inj.forEach(x=>rows.push(['حقنة '+x.name,x.date,x.doe?dn(x.doe):'الكل','',x.dose,'']));S.meds.forEach(x=>rows.push(['دواء '+x.name,x.date,x.doe?dn(x.doe):'الكل','',x.dose,'']));S.sales.forEach(s=>rows.push(['بيع',s.date,s.doe?dn(s.doe):'',s.buyer,s.count,s.total,s.weight||'',s.kilo||'']));(S.bk||[]).forEach(b=>rows.push(['ذكر '+b.name,b.born||'','',b.name,'','',bkLast(b)||'','']));(S.wean||[]).forEach(w=>rows.push(['فطام '+(w.num||''),w.date,w.doe?dn(w.doe):'','',w.count,'',lastW(w)||'','']));dl('rabbits.csv','\ufeff'+rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(',')).join('\n'),'text/csv')}
 // ===== sync (Supabase RPC, no secrets: anon key is public, data keyed by hash of user's sync code) =====
 const SB_URL='https://bgwbbqcuntidvmwdppax.supabase.co',SB_KEY='sb_publishable_T2ERNz8uQYuC4I1XWFdi4w_ZV9Yu7pV',SCODE='rabbitfarm.sync';
 let syncSt=localStorage.getItem(SCODE)?'idle':'off',syncT=null,syncBusy=false;
-const ARR=['does','matings','births','sales','inj','meds','wean'];
+const ARR=['does','matings','births','sales','inj','meds','wean','bk'];
 async function shash(c){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('rabbit-farm:'+c.trim()));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 async function rpc(fn,body){const r=await fetch(SB_URL+'/rest/v1/rpc/'+fn,{method:'POST',headers:{'apikey':SB_KEY,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error(r.status);const t=await r.text();return t?JSON.parse(t):null}
 function setSt(s){syncSt=s;const e=document.getElementById('syncst');if(e)e.textContent=syncLabel()}
@@ -260,8 +290,8 @@ async function syncPush(){const c=localStorage.getItem(SCODE);if(!c)return;await
 async function syncPull(first){const c=localStorage.getItem(SCODE);if(!c||syncBusy)return;syncBusy=true;setSt('busy');
  try{const h=await shash(c);const r=await rpc('rf_get',{h});
   if(r&&r.data){const rd=r.data;
-   if(first){S=mergeAll(S,rd);S.inj=S.inj||[];S.meds=S.meds||[];S.wean=S.wean||[];S.ts=Date.now();rawSave();await syncPush();render()}
-   else if((rd.ts||0)>(S.ts||0)){S=rd;S.inj=S.inj||[];S.meds=S.meds||[];S.wean=S.wean||[];rawSave();render()}
+   if(first){S=mergeAll(S,rd);S.inj=S.inj||[];S.meds=S.meds||[];S.wean=S.wean||[];S.bk=S.bk||[];S.ts=Date.now();rawSave();await syncPush();render()}
+   else if((rd.ts||0)>(S.ts||0)){S=rd;S.inj=S.inj||[];S.meds=S.meds||[];S.wean=S.wean||[];S.bk=S.bk||[];rawSave();render()}
    else if((S.ts||0)>(rd.ts||0)){await syncPush()}
   }else{S.ts=S.ts||Date.now();await syncPush()}
   setSt('ok')}catch(e){setSt('err')}finally{syncBusy=false}}
