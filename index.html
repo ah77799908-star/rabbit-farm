@@ -49,7 +49,7 @@ input,select,textarea{width:100%;padding:11px;border:1px solid #ccc;border-radiu
 const KEY='rabbitfarm.v1';
 let S;try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){}
 S=S||{does:[],bucks:[],matings:[],births:[],sales:[],set:{gest:31,palp:14,nest:28,wean:35,rest:7},lastBackup:null};
-S.inj=S.inj||[];S.meds=S.meds||[];
+S.inj=S.inj||[];S.meds=S.meds||[];S.wean=S.wean||[];S.wean=S.wean||[];
 let tab='home',filter='all',q='';
 const rawSave=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){alert('تعذر الحفظ على الجهاز')}};
 const save=()=>{S.ts=Date.now();rawSave();if(typeof syncQueue=='function')syncQueue()};
@@ -75,8 +75,8 @@ const stTag=d=>{const s=status(d);return s.k==='preg'?'<span class="tag o">🤰 
 // ---------- render
 function render(){
  document.getElementById('sub').textContent=S.does.length+' أنثى • '+S.bucks.length+' ذكر • '+today().split('-').reverse().join('/');
- document.getElementById('nav').innerHTML=[['home','🏠','الرئيسية'],['does','🐰','الإناث'],['log','📒','السجل'],['health','💉','الصحة'],['sales','💰','المبيعات'],['more','⚙️','المزيد']].map(x=>`<button class="${tab==x[0]?'on':''}" onclick="go('${x[0]}')"><i>${x[1]}</i>${x[2]}</button>`).join('');
- const v={home,does,log,health,sales,more}[tab];
+ document.getElementById('nav').innerHTML=[['home','🏠','الرئيسية'],['does','🐰','الإناث'],['log','📒','السجل'],['health','💉','الصحة'],['wean','🍼','الفطام'],['sales','💰','المبيعات'],['more','⚙️','المزيد']].map(x=>`<button class="${tab==x[0]?'on':''}" onclick="go('${x[0]}')"><i>${x[1]}</i>${x[2]}</button>`).join('');
+ const v={home,does,log,health,wean:weanTab,sales,more}[tab];
  document.getElementById('app').innerHTML=v();window.scrollTo(0,0);
 }
 function go(t){tab=t;render()}
@@ -156,13 +156,47 @@ function more(){
  const s=S.set;
  return `<div class="card"><h3>🐇 الذكور</h3>`+S.bucks.map(b=>`<div class="row"><b>${esc(b)}</b><button class="btn d sm" onclick="delBuck('${esc(b)}')">حذف</button></div>`).join('')+`<button class="btn s" onclick="buckForm()">+ إضافة ذكر</button></div>
  <div class="card"><h3>⏱️ مواعيد (بالأيام)</h3><div class="m">الأرقام دي تقديرات شائعة، عدّلها حسب خبرتك</div>
- ${[['gest','مدة الحمل'],['palp','جس الحمل بعد'],['nest','تجهيز بيت الولادة بعد'],['wean','الفطام بعد الولادة بـ']].map(x=>`<label>${x[1]}</label><input type="number" inputmode="numeric" value="${s[x[0]]}" onchange="S.set.${x[0]}=+this.value||${s[x[0]]};save();render()">`).join('')}</div>
+ ${[['gest','مدة الحمل'],['palp','جس الحمل بعد'],['nest','تجهيز بيت الولادة بعد'],['wean','الفطام بعد الولادة بـ']].map(x=>`<label>${x[1]}</label><input type="number" inputmode="numeric" value="${s[x[0]]}" onchange="S.set.${x[0]}=+this.value||${s[x[0]]};save();render()">`).join('')}<label>وزن الجاهز للبيع (جرام)</label><input type="number" inputmode="numeric" value="${WTARGET()}" onchange="S.set.wtarget=+this.value||1800;save();render()"></div>
  <div class="card"><h3>🔄 مزامنة بين الأجهزة</h3><div class="m">الحالة: <b id="syncst">${syncLabel()}</b><br>اربط الجهازين بنفس كود المزامنة وهتظهر نفس البيانات على الاتنين.</div><div class="acts">${localStorage.getItem(SCODE)?`<button class="btn" onclick="syncPull(false)">🔄 مزامنة دلوقتي</button><button class="btn d" onclick="syncOff()">إيقاف</button>`:`<button class="btn" onclick="syncOn()">تفعيل المزامنة</button>`}</div></div>
  <div class="card"><h3>💾 نسخة احتياطية</h3><div class="m">آخر نسخة: ${S.lastBackup?fd(S.lastBackup):'لسه محصلتش'}<br>خد نسخة كل فترة وابعتها لنفسك على واتساب، حتى مع المزامنة.</div>
  <div class="acts"><button class="btn" onclick="exportData()">⬇️ حفظ نسخة</button><button class="btn s" onclick="document.getElementById('imp').click()">⬆️ استرجاع نسخة</button></div>
  <input type="file" id="imp" accept=".json,application/json" hidden onchange="importData(this)"></div>
  <div class="card"><button class="btn s" onclick="exportCSV()" style="width:100%">📊 تصدير الحسابات Excel (CSV)</button></div>`;
 }
+
+// ---------- weaned rabbits
+const WTARGET=()=>S.set.wtarget||1800;
+const lastW=w=>{const a=(w.ws||[]).slice().sort((x,y)=>x.d.localeCompare(y.d));return a.length?a[a.length-1].g:0};
+const wLive=w=>Math.max(0,(+w.count||0)-(+w.dead||0)-(+w.sold||0));
+function wGain(w){const a=(w.ws||[]).slice().sort((x,y)=>x.d.localeCompare(y.d));if(a.length<2)return null;const f=a[0],l=a[a.length-1],n=diff(l.d,f.d);return n>0?Math.round((l.g-f.g)/n*10)/10:null}
+function weanTab(){S.wean=S.wean||[];
+ const all=S.wean,act=all.filter(w=>!w.closed),live=act.reduce((a,w)=>a+wLive(w),0),dead=all.reduce((a,w)=>a+(+w.dead||0),0),tot=all.reduce((a,w)=>a+(+w.count||0),0);
+ const ws=act.filter(w=>wLive(w)>0&&lastW(w)>0),avg=ws.length?Math.round(ws.reduce((a,w)=>a+lastW(w)*wLive(w),0)/ws.reduce((a,w)=>a+wLive(w),0)):0;
+ const t=today();
+ const card=w=>{const lw=lastW(w),gn=wGain(w),age=diff(t,w.date),ready=lw>=WTARGET()&&!w.closed;
+  return `<div class="card"><div class="row" style="border:0"><span><b>${w.num?'دفعة '+esc(w.num):'دفعة'}</b> ${w.closed?'<span class="tag x">منتهية</span>':ready?'<span class="tag o">جاهزة للبيع ✅</span>':''}<div class="m">فطام ${fd(w.date)} • عمرها ${age} يوم من الفطام${w.doe?' • من أم '+esc(dn(w.doe)):''}${w.loc?' • '+esc(w.loc):''}</div></span><span class="tag b">${wLive(w)} / ${w.count}</span></div>
+  <div class="m">${lw?'آخر وزن: <b>'+lw+' جم</b> للأرنب':'لسه ماتوزنش'}${gn!==null?' • زيادة '+gn+' جم/يوم':''}${w.dead?' • نافق '+w.dead:''}${w.sold?' • مباع '+w.sold:''}${w.m||w.f?' • ذكور '+(w.m||0)+' / إناث '+(w.f||0):''}${w.note?'<br>📝 '+esc(w.note):''}</div>
+  ${(w.ws||[]).length?'<div class="m" style="margin-top:4px">'+(w.ws||[]).slice().sort((a,b)=>b.d.localeCompare(a.d)).slice(0,4).map(x=>fd(x.d)+': '+x.g+' جم').join(' • ')+'</div>':''}
+  <div class="chips" style="margin:8px 0 0;flex-wrap:wrap"><button onclick="wWeighForm('${w.id}')">⚖️ وزن</button><button onclick="wDeadForm('${w.id}')">☠️ نافق</button><button onclick="wSellForm('${w.id}')">💰 بيع</button><button onclick="wBatchForm('${w.id}')">✏️ تعديل</button><button onclick="wClose('${w.id}')">${w.closed?'↩️ فتح':'✔️ إنهاء'}</button><button onclick="del('w','${w.id}')">🗑️</button></div></div>`};
+ return `<div class="grid"><div class="stat"><b>${live}</b><span>أرانب فطام حاليا</span></div><div class="stat"><b>${avg?avg+' جم':'-'}</b><span>متوسط الوزن</span></div><div class="stat"><b>${act.length}</b><span>دفعات شغالة</span></div><div class="stat"><b>${tot?Math.round(dead/tot*1000)/10:0}%</b><span>نسبة النفوق</span></div></div>
+ <button class="btn" style="width:100%;margin-top:10px" onclick="wBatchForm()">+ تسجيل دفعة فطام</button>
+ <div class="m" style="margin-top:6px">الجاهز للبيع: وزن ${WTARGET()} جم فأكتر (تقدر تغيره من المزيد).</div>`
+ +(all.length?[...act.sort((a,b)=>b.date.localeCompare(a.date)),...all.filter(w=>w.closed).sort((a,b)=>b.date.localeCompare(a.date))].map(card).join(''):'<div class="card empty">لسه مفيش دفعات فطام. اضغط + تسجيل دفعة فطام</div>');
+}
+function wBatchForm(id){const w=id?S.wean.find(x=>x.id==id):null;
+ sheet(w?'✏️ تعديل دفعة فطام':'🍼 دفعة فطام جديدة',`<label>رقم الدفعة / القفص</label><input id="f1" value="${w?esc(w.num):''}" placeholder="مثال: 5"><label>تاريخ الفطام</label><input type="date" id="f2" value="${w?w.date:today()}"><label>العدد</label><input type="number" inputmode="numeric" id="f3" value="${w?w.count:''}"><label>الوزن (جرام للأرنب الواحد) (اختياري)</label><input type="number" inputmode="decimal" id="f4" placeholder="مثال: 650" value="${w&&lastW(w)?lastW(w):''}"><label>تاريخ الوزن</label><input type="date" id="f5" value="${today()}"><label>من أم رقم (اختياري)</label><select id="f6"><option value="">-</option>${S.does.map(d=>`<option value="${d.id}" ${w&&w.doe==d.id?'selected':''}>${esc(d.num)}</option>`).join('')}</select><label>ذكور / إناث (اختياري)</label><div class="acts" style="margin:0"><input type="number" inputmode="numeric" id="f7" placeholder="ذكور" value="${w&&w.m?w.m:''}"><input type="number" inputmode="numeric" id="f8" placeholder="إناث" value="${w&&w.f?w.f:''}"></div><label>المكان / القفص (اختياري)</label><input id="f9" value="${w?esc(w.loc||''):''}"><label>ملاحظات (اختياري)</label><input id="f10" value="${w?esc(w.note||''):''}"><div class="acts"><button class="btn" onclick="saveBatch('${id||''}')">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
+function saveBatch(id){const c=+V('f3');if(!V('f2'))return toast('اختار التاريخ');if(!c||c<1)return toast('اكتب العدد');
+ let w=id?S.wean.find(x=>x.id==id):null;if(!w){w={id:uid(),ws:[],dead:0,sold:0,closed:false};S.wean.push(w)}
+ w.num=V('f1').trim();w.date=V('f2');w.count=c;w.doe=V('f6');w.m=+V('f7')||0;w.f=+V('f8')||0;w.loc=V('f9').trim();w.note=V('f10').trim();
+ const g=+V('f4');w.ws=w.ws||[];if(g>0&&V('f5')){const e=w.ws.find(x=>x.d==V('f5'));if(e)e.g=g;else w.ws.push({d:V('f5'),g})}
+ save();closeS();tab='wean';render();toast('تم الحفظ')}
+function wWeighForm(id){sheet('⚖️ وزن جديد',`<label>التاريخ</label><input type="date" id="f1" value="${today()}"><label>متوسط وزن الأرنب (جرام)</label><input type="number" inputmode="decimal" id="f2" placeholder="مثال: 900"><div class="acts"><button class="btn" onclick="saveWeigh('${id}')">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
+function saveWeigh(id){const g=+V('f2');if(!g||!V('f1'))return toast('اكتب الوزن والتاريخ');const w=S.wean.find(x=>x.id==id);w.ws=w.ws||[];const e=w.ws.find(x=>x.d==V('f1'));if(e)e.g=g;else w.ws.push({d:V('f1'),g});save();closeS();render();toast('تم تسجيل الوزن')}
+function wDeadForm(id){sheet('☠️ نافق',`<label>عدد النافق</label><input type="number" inputmode="numeric" id="f1" value="1"><div class="acts"><button class="btn" onclick="saveDead('${id}')">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
+function saveDead(id){const n=+V('f1');const w=S.wean.find(x=>x.id==id);if(!n||n<1)return toast('اكتب العدد');if(n>wLive(w))return toast('العدد أكبر من الموجود');w.dead=(+w.dead||0)+n;save();closeS();render()}
+function wSellForm(id){const w=S.wean.find(x=>x.id==id);sheet('💰 بيع من الدفعة',`<div class="m">الموجود: ${wLive(w)}</div><label>التاريخ</label><input type="date" id="f1" value="${today()}"><label>عدد المباع</label><input type="number" inputmode="numeric" id="f2" value="${wLive(w)}"><label>إجمالي السعر (جنيه)</label><input type="number" inputmode="decimal" id="f3"><label>اسم المشتري (اختياري)</label><input id="f4"><div class="m">هيتسجل كمان في تبويب المبيعات</div><div class="acts"><button class="btn" onclick="saveWSell('${id}')">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
+function saveWSell(id){const w=S.wean.find(x=>x.id==id),n=+V('f2');if(!n||n<1)return toast('اكتب العدد');if(n>wLive(w))return toast('العدد أكبر من الموجود');const lw=lastW(w);w.sold=(+w.sold||0)+n;S.sales.push({id:uid(),date:V('f1'),count:n,total:+V('f3')||0,buyer:V('f4'),doe:w.doe||'',weight:lw?Math.round(lw*n)/1000:0,kilo:0});if(wLive(w)==0)w.closed=true;save();closeS();render();toast('تم البيع')}
+function wClose(id){const w=S.wean.find(x=>x.id==id);w.closed=!w.closed;save();render()}
 // ---------- sheet
 function sheet(title,body){const e=document.createElement('div');e.className='sheet-bg';e.id='sh';e.onclick=ev=>{if(ev.target===e)closeS()};e.innerHTML=`<div class="sheet"><h2>${title}</h2>${body}</div>`;document.body.appendChild(e)}
 function closeS(){const e=document.getElementById('sh');if(e)e.remove()}
@@ -170,7 +204,7 @@ function toast(m){const e=document.createElement('div');e.className='toast';e.te
 const V=id=>document.getElementById(id).value;
 const doeOpts=(sel,f)=>S.does.filter(f||(()=>true)).sort((a,b)=>String(a.num).localeCompare(String(b.num),undefined,{numeric:true})).map(d=>`<option value="${d.id}" ${d.id==sel?'selected':''}>${esc(d.num)}</option>`).join('');
 const buckOpts=()=>S.bucks.map(b=>`<option>${esc(b)}</option>`).join('')+'<option value="">غير معروف</option>';
-function quick(){sheet('تسجيل سريع',`<div class="acts"><button class="btn" onclick="closeS();matingForm()">💕 تزاوج</button><button class="btn" onclick="closeS();birthForm()">🍼 ولادة</button><button class="btn" onclick="closeS();weanForm()">✂️ فطام</button><button class="btn" onclick="closeS();saleForm()">💰 بيع</button><button class="btn" onclick="closeS();injForm()">💉 حقنة</button><button class="btn" onclick="closeS();medForm()">💊 دواء</button><button class="btn s" onclick="closeS();doeForm()">🐰 أنثى جديدة</button><button class="btn s" onclick="closeS();checkForm()">🔍 نتيجة جس</button></div>`)}
+function quick(){sheet('تسجيل سريع',`<div class="acts"><button class="btn" onclick="closeS();matingForm()">💕 تزاوج</button><button class="btn" onclick="closeS();birthForm()">🍼 ولادة</button><button class="btn" onclick="closeS();weanForm()">✂️ فطام</button><button class="btn" onclick="closeS();wBatchForm()">🍼 دفعة فطام</button><button class="btn" onclick="closeS();saleForm()">💰 بيع</button><button class="btn" onclick="closeS();injForm()">💉 حقنة</button><button class="btn" onclick="closeS();medForm()">💊 دواء</button><button class="btn s" onclick="closeS();doeForm()">🐰 أنثى جديدة</button><button class="btn s" onclick="closeS();checkForm()">🔍 نتيجة جس</button></div>`)}
 function doeForm(){sheet('إضافة أنثى',`<label>رقم الأنثى</label><input id="f1" inputmode="text" placeholder="مثال: 12"><label>السلالة / ملاحظات (اختياري)</label><input id="f2"><div class="acts"><button class="btn" onclick="saveDoe()">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
 function saveDoe(){const n=V('f1').trim();if(!n)return toast('اكتب الرقم');if(S.does.some(d=>String(d.num)==n))return toast('الرقم ده موجود');S.does.push({id:uid(),num:n,note:V('f2')});save();closeS();render();toast('تمت الإضافة')}
 function bulkForm(){sheet('إضافة عدة إناث',`<div class="m">اكتب من رقم لرقم (مثلا من 1 إلى 40)</div><label>من</label><input id="f1" type="number" inputmode="numeric"><label>إلى</label><input id="f2" type="number" inputmode="numeric"><div class="acts"><button class="btn" onclick="saveBulk()">إضافة</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
@@ -194,11 +228,11 @@ function saveBirth(){const d=V('f1'),a=+V('f4')||0,x=+V('f5')||0;const m=S.matin
  if(m)m.result='born';S.births.push({id:uid(),doe:d,matingId:m?m.id:null,buck:m?m.buck:'',date:V('f3'),alive:a,dead:x,weaned:false});save();closeS();render();toast('مبروك 🎉 الفطام '+fd(addD(V('f3'),S.set.wean)))}
 function weanForm(id){const o=S.births.filter(b=>!b.weaned&&b.alive>0);if(!o.length)return toast('مفيش ولادات منتظرة فطام');
  sheet('✂️ تسجيل فطام',`<label>الولادة</label><select id="f1" onchange="document.getElementById('f4').value=S.births.find(b=>b.id==this.value).alive">${o.map(b=>`<option value="${b.id}" ${b.doe==id?'selected':''}>أنثى ${esc(dn(b.doe))} - ${fd(b.date)} (${b.alive})</option>`).join('')}</select><label>تاريخ الفطام</label><input type="date" id="f3" value="${today()}"><label>عدد الصغار اللي اتفطموا</label><input type="number" inputmode="numeric" id="f4" value="${(o.find(b=>b.doe==id)||o[0]).alive}"><div class="acts"><button class="btn" onclick="saveWean()">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
-function saveWean(){const b=S.births.find(b=>b.id==V('f1'));b.weaned=true;b.weanDate=V('f3');b.weanedCount=+V('f4')||0;save();closeS();render();toast('تم الفطام')}
+function saveWean(){const b=S.births.find(b=>b.id==V('f1'));b.weaned=true;b.weanDate=V('f3');b.weanedCount=+V('f4')||0;S.wean=S.wean||[];if(b.weanedCount>0&&!S.wean.some(x=>x.birth==b.id))S.wean.push({id:uid(),num:'',date:b.weanDate,count:b.weanedCount,doe:b.doe,birth:b.id,ws:[],dead:0,loc:'',note:'',sold:0,closed:false});save();closeS();render();toast('تم الفطام')}
 function saleForm(id){sheet('💰 تسجيل بيع',`<label>التاريخ</label><input type="date" id="f1" value="${today()}"><label>عدد الأرانب</label><input type="number" inputmode="numeric" id="f2" value="1"><label>الوزن الإجمالي (كجم) (اختياري)</label><input type="number" inputmode="decimal" id="f6" oninput="calcSale()"><label>سعر الكيلو (جنيه) (اختياري)</label><input type="number" inputmode="decimal" id="f7" oninput="calcSale()"><label>إجمالي السعر (جنيه)</label><input type="number" inputmode="decimal" id="f3"><div class="m">لو كتبت الوزن وسعر الكيلو الإجمالي بيتحسب لوحده</div><label>اسم المشتري (اختياري)</label><input id="f4"><label>من أم رقم (اختياري)</label><select id="f5"><option value="">-</option>${doeOpts(id)}</select><div class="acts"><button class="btn" onclick="saveSale()">حفظ</button><button class="btn s" onclick="closeS()">إلغاء</button></div>`)}
 function calcSale(){const w=+V('f6'),k=+V('f7');if(w&&k)document.getElementById('f3').value=Math.round(w*k*100)/100}
 function saveSale(){const c=+V('f2');if(!c)return toast('اكتب العدد');S.sales.push({id:uid(),date:V('f1'),count:c,total:+V('f3')||0,buyer:V('f4'),doe:V('f5'),weight:+V('f6')||0,kilo:+V('f7')||0});save();closeS();render();toast('تم التسجيل')}
-function del(k,id){if(!confirm('متأكد من الحذف؟'))return;const m={m:'matings',b:'births',s:'sales',i:'inj',d:'meds'}[k];S[m]=S[m].filter(x=>x.id!==id);save();render()}
+function del(k,id){if(!confirm('متأكد من الحذف؟'))return;const m={m:'matings',b:'births',s:'sales',i:'inj',d:'meds',w:'wean'}[k];S[m]=S[m].filter(x=>x.id!==id);save();render()}
 function doeView(id){
  const d=doe(id);if(!d)return;const ms=S.matings.filter(m=>m.doe==id).sort((a,b)=>b.date.localeCompare(a.date)),bs=S.births.filter(b=>b.doe==id).sort((a,b)=>b.date.localeCompare(a.date));
  const tot=bs.reduce((a,b)=>a+b.alive,0);
@@ -211,12 +245,12 @@ function delDoe(id){if(!confirm('حذف الأنثى وكل سجلاتها؟'))r
 // backup
 function dl(name,txt,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type}));a.download=name;document.body.appendChild(a);a.click();a.remove()}
 function exportData(){S.lastBackup=today();save();dl('rabbits-backup-'+today()+'.json',JSON.stringify(S),'application/json');render()}
-function importData(i){const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.does)throw 0;if(confirm('هيتم استبدال البيانات الحالية بالنسخة دي. متأكد؟')){S=d;S.inj=S.inj||[];S.meds=S.meds||[];save();render();toast('تم الاسترجاع')}}catch(e){alert('الملف غير صالح')}};r.readAsText(f)}
-function exportCSV(){const rows=[['النوع','التاريخ','الأنثى','الذكر','عدد','المبلغ','الوزن كجم','سعر الكيلو']];S.matings.forEach(m=>rows.push(['تزاوج',m.date,dn(m.doe),m.buck,'','']));S.births.forEach(b=>rows.push(['ولادة',b.date,dn(b.doe),b.buck,b.alive,'']));S.inj.forEach(x=>rows.push(['حقنة '+x.name,x.date,x.doe?dn(x.doe):'الكل','',x.dose,'']));S.meds.forEach(x=>rows.push(['دواء '+x.name,x.date,x.doe?dn(x.doe):'الكل','',x.dose,'']));S.sales.forEach(s=>rows.push(['بيع',s.date,s.doe?dn(s.doe):'',s.buyer,s.count,s.total,s.weight||'',s.kilo||'']));dl('rabbits.csv','\ufeff'+rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(',')).join('\n'),'text/csv')}
+function importData(i){const f=i.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.does)throw 0;if(confirm('هيتم استبدال البيانات الحالية بالنسخة دي. متأكد؟')){S=d;S.inj=S.inj||[];S.meds=S.meds||[];S.wean=S.wean||[];save();render();toast('تم الاسترجاع')}}catch(e){alert('الملف غير صالح')}};r.readAsText(f)}
+function exportCSV(){const rows=[['النوع','التاريخ','الأنثى','الذكر','عدد','المبلغ','الوزن كجم','سعر الكيلو']];S.matings.forEach(m=>rows.push(['تزاوج',m.date,dn(m.doe),m.buck,'','']));S.births.forEach(b=>rows.push(['ولادة',b.date,dn(b.doe),b.buck,b.alive,'']));S.inj.forEach(x=>rows.push(['حقنة '+x.name,x.date,x.doe?dn(x.doe):'الكل','',x.dose,'']));S.meds.forEach(x=>rows.push(['دواء '+x.name,x.date,x.doe?dn(x.doe):'الكل','',x.dose,'']));S.sales.forEach(s=>rows.push(['بيع',s.date,s.doe?dn(s.doe):'',s.buyer,s.count,s.total,s.weight||'',s.kilo||'']));(S.wean||[]).forEach(w=>rows.push(['فطام '+(w.num||''),w.date,w.doe?dn(w.doe):'','',w.count,'',lastW(w)||'','']));dl('rabbits.csv','\ufeff'+rows.map(r=>r.map(c=>'"'+String(c==null?'':c).replace(/"/g,'""')+'"').join(',')).join('\n'),'text/csv')}
 // ===== sync (Supabase RPC, no secrets: anon key is public, data keyed by hash of user's sync code) =====
 const SB_URL='https://bgwbbqcuntidvmwdppax.supabase.co',SB_KEY='sb_publishable_T2ERNz8uQYuC4I1XWFdi4w_ZV9Yu7pV',SCODE='rabbitfarm.sync';
 let syncSt=localStorage.getItem(SCODE)?'idle':'off',syncT=null,syncBusy=false;
-const ARR=['does','matings','births','sales','inj','meds'];
+const ARR=['does','matings','births','sales','inj','meds','wean'];
 async function shash(c){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('rabbit-farm:'+c.trim()));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 async function rpc(fn,body){const r=await fetch(SB_URL+'/rest/v1/rpc/'+fn,{method:'POST',headers:{'apikey':SB_KEY,'Content-Type':'application/json'},body:JSON.stringify(body)});if(!r.ok)throw new Error(r.status);const t=await r.text();return t?JSON.parse(t):null}
 function setSt(s){syncSt=s;const e=document.getElementById('syncst');if(e)e.textContent=syncLabel()}
@@ -226,8 +260,8 @@ async function syncPush(){const c=localStorage.getItem(SCODE);if(!c)return;await
 async function syncPull(first){const c=localStorage.getItem(SCODE);if(!c||syncBusy)return;syncBusy=true;setSt('busy');
  try{const h=await shash(c);const r=await rpc('rf_get',{h});
   if(r&&r.data){const rd=r.data;
-   if(first){S=mergeAll(S,rd);S.inj=S.inj||[];S.meds=S.meds||[];S.ts=Date.now();rawSave();await syncPush();render()}
-   else if((rd.ts||0)>(S.ts||0)){S=rd;S.inj=S.inj||[];S.meds=S.meds||[];rawSave();render()}
+   if(first){S=mergeAll(S,rd);S.inj=S.inj||[];S.meds=S.meds||[];S.wean=S.wean||[];S.ts=Date.now();rawSave();await syncPush();render()}
+   else if((rd.ts||0)>(S.ts||0)){S=rd;S.inj=S.inj||[];S.meds=S.meds||[];S.wean=S.wean||[];rawSave();render()}
    else if((S.ts||0)>(rd.ts||0)){await syncPush()}
   }else{S.ts=S.ts||Date.now();await syncPush()}
   setSt('ok')}catch(e){setSt('err')}finally{syncBusy=false}}
